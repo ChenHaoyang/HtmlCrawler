@@ -6,6 +6,11 @@
     <id>cloudera-repo-releases</id>
     <url>https://repository.cloudera.com/artifactory/repo/</url>
   </repository>
+  <repository>
+	<id>maven-hadoop</id>
+	<name>Hadoop Releases</name>
+	<url>https://repository.cloudera.com/content/repositories/releases/</url>
+  </repository>
 </repositories>
   <groupId>com.mad</groupId>
   <artifactId>HtmlCrawler</artifactId>
@@ -31,11 +36,13 @@
 		<artifactId>jsoup</artifactId>
 		<version>1.9.1</version>	
 	</dependency>
+	<!-- 
     <dependency>
 		<groupId>commons-lang</groupId>
 		<artifactId>commons-lang</artifactId>
 		<version>2.6</version>
 	</dependency>
+	 -->
 	<dependency>
 		<groupId>com.googlecode.juniversalchardet</groupId>
 		<artifactId>juniversalchardet</artifactId>
@@ -47,17 +54,21 @@
 	<version>4.5.2</version>
 </dependency>
 <!-- http://mvnrepository.com/artifact/org.apache.hadoop/hadoop-client -->
+<!-- 
 <dependency>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-client</artifactId>
     <version>2.7.2</version>
 </dependency>
+ -->
 <!-- http://mvnrepository.com/artifact/org.apache.hbase/hbase-client -->
+<!-- 
 <dependency>
     <groupId>org.apache.hbase</groupId>
     <artifactId>hbase-client</artifactId>
-    <version>1.2.1</version>
+    <version>0.98.6-cdh5.3.0</version>
 </dependency>
+-->
 <dependency>
   <groupId>com.cloudera</groupId>
   <artifactId>spark-hbase</artifactId>

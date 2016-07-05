@@ -13,18 +13,21 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.BufferedMutator;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
+//import org.apache.hadoop.hbase.client.BufferedMutator;
+//import org.apache.hadoop.hbase.client.Connection;
+//import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.Table;
+//import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.SequenceFile;
@@ -33,9 +36,8 @@ import org.apache.hadoop.io.SequenceFile.Metadata;
 import org.apache.hadoop.io.SequenceFile.Writer;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.DefaultCodec;
-import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.ClientProtocolException;
+import org.apache.http.HttpHost;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -55,21 +57,43 @@ public class HtmlCrawler
 {
 	private CloseableHttpClient m_httpClient;
 	private RequestConfig m_requestConfig;
+	private HttpHost m_httpHost;
 	private UniversalDetector m_uDetector;
 	public Configuration /*m_dfsConfig,*/ m_hbaseConfig;
 	private String m_accessUser;
 //	public FileSystem m_dfs;
 	private String m_hdfsPath;
+	private String m_osUserName;
+	final private String m_proxyHost = "192.168.10.45";
+	final private int m_proxyPort = 3128;
 	
-	public HtmlCrawler(){
-		m_httpClient = HttpClients.custom()
-				.setRedirectStrategy(new LaxRedirectStrategy())
-				.build();
-		m_requestConfig = RequestConfig.custom()
-				.setSocketTimeout(3000)
-				.setConnectTimeout(3000)
-				.setConnectionRequestTimeout(3000)
-				.build();
+	public HtmlCrawler(String osUser, boolean proxy){
+		if(osUser != null && !"".equals(osUser))
+			m_osUserName = osUser;
+		else
+			m_osUserName = "charles";
+		if(proxy){	
+			m_httpHost = new HttpHost(m_proxyHost,m_proxyPort);
+			m_httpClient = HttpClients.custom()
+					.setRedirectStrategy(new LaxRedirectStrategy())
+					.setProxy(m_httpHost)
+					.build();
+			m_requestConfig = RequestConfig.custom()
+					.setSocketTimeout(5000)
+					.setConnectTimeout(5000)
+					.setConnectionRequestTimeout(5000)
+					//.setProxy(m_httpHost)
+					.build();
+		}else{
+			m_httpClient = HttpClients.custom()
+					.setRedirectStrategy(new LaxRedirectStrategy())
+					.build();
+			m_requestConfig = RequestConfig.custom()
+					.setSocketTimeout(5000)
+					.setConnectTimeout(5000)
+					.setConnectionRequestTimeout(5000)
+					.build();
+		}
 		m_uDetector = new UniversalDetector(null);
 		HttpURLConnection.setFollowRedirects(true);
 //		m_dfsConfig = new Configuration();
@@ -109,7 +133,11 @@ public class HtmlCrawler
 //		}
 //	}
 	
-	public String getHtml(String url){	
+	public String GetOsUserName(){
+		return m_osUserName;
+	}
+	
+ 	public String getHtml(String url){	
 		String html=null, encoding;
 		byte[] data=null;
 		
@@ -183,7 +211,7 @@ public class HtmlCrawler
 	public boolean writeToLocal(String contents, String name, boolean append){
 		BufferedWriter bw;
 		try {
-			File f = new File("/home/charles/Data/output/Error/"+name+".txt");
+			File f = new File("/home/"+m_osUserName+"/Data/output/Error/"+name+".txt");
 			if(f.exists())
 				bw= new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f, append)));
 			else{
@@ -282,102 +310,135 @@ public class HtmlCrawler
 //		return true;
 //	}
 	
-	public boolean writeToHBase(BufferedMutator table, String row_key, String family, String qualifier, String value) throws IOException{
-		Put p = new Put(Bytes.toBytes(row_key));
-		if(qualifier == null)
-			p.addColumn(Bytes.toBytes(family), null, Bytes.toBytes(value));
-		else
-			p.addColumn(Bytes.toBytes(family), Bytes.toBytes(qualifier), Bytes.toBytes(value));
-		table.mutate(p);
-		
-		return true;
-	}
+//	public boolean writeToHBase(BufferedMutator table, String row_key, String family, String qualifier, String value) throws IOException{
+//		Put p = new Put(Bytes.toBytes(row_key));
+//		if(qualifier == null)
+//			p.addColumn(Bytes.toBytes(family), null, Bytes.toBytes(value));
+//		else
+//			p.addColumn(Bytes.toBytes(family), Bytes.toBytes(qualifier), Bytes.toBytes(value));
+//		table.mutate(p);
+//		
+//		return true;
+//	}
 	
-    public static void main( String[] args )
-    {
-    	BufferedReader br = null;
-    	String line_str, err_msg;
-    	String[] tokens;
-    	Connection conn=null;
-    	Table table = null;
-    	BufferedMutator mutator=null;
-    	long skip_count=0, insert_count=0, error_count=0;
-    	long skip_time=0, insert_time=0, error_time=0;
-    	
-    	HtmlCrawler crawler = new HtmlCrawler();
-    	//crawler.writeToLocal("test","abc",true);
-    	try{
-    		//HTable table = new HTable(crawler.m_hbaseConfig, "test");
-    		conn = ConnectionFactory.createConnection(crawler.m_hbaseConfig);
-    		//System.out.println(crawler.m_hbaseConfig.get("hbase.client.write.buffer"));
-    		table = conn.getTable(TableName.valueOf("url_info"));
-    		mutator = conn.getBufferedMutator(TableName.valueOf("url_info"));
-//        	Get g = new Get(Bytes.toBytes("1"));
-//        	Result r = table.get(g);
-//        	Put p = new Put(Bytes.toBytes("1"));
-//        	p.addColumn(Bytes.toBytes("c1"), Bytes.toBytes("t1"), Bytes.toBytes("6"));
-//        	p.addColumn(Bytes.toBytes("c2"), Bytes.toBytes("m1"), Bytes.toBytes("Haoyang"));
-//        	table.put(p);
-    		br = new BufferedReader(new InputStreamReader(new FileInputStream("/home/charles/Data/input/"+args[0])));
-    		line_str = br.readLine();
-    		//long time = System.currentTimeMillis();
-    		while(line_str != null && !"".equals(line_str)){
-    			long time = System.currentTimeMillis();
-    			tokens = line_str.split(",");
-    			if(tokens.length != 2){
-    				err_msg = "Invalid input url: " + line_str + "\n";
-    				System.out.print(err_msg);
-    				continue;
-    			}
-    			//Path tmp_path = new Path(crawler.m_hdfsPath + tokens[0] + ".txt");
-				Get g = new Get(Bytes.toBytes(tokens[0]));
-				Result r = table.get(g);
-				System.out.print(tokens[0] + ": ");
-    			//if(crawler.m_dfs.exists(tmp_path)){
-				if(r.isEmpty()){
-	    			String html = crawler.getHtml(tokens[1]);
-	    			if(html != null && !"".equals(html)){
-	    				crawler.writeToHBase(mutator, tokens[0], "raw_html", null, html);
-	    				System.out.print("INSERT\n");
-	    				insert_count++;
-	    				insert_time += (System.currentTimeMillis()-time);
-	    			}else{
-	    				err_msg = line_str + "\n"; 
-	    				crawler.writeToLocal(err_msg, "error_" + args[1], true);
-	    				System.out.print("Local\n");
-	    				error_count++;
-	    				error_time += (System.currentTimeMillis()-time);
-	    			}
-    				//crawler.writeSequenceFile(tokens[0], crawler.readFromHdfs(tokens[0]), "seq_"+args[1]);
-    				//crawler.writeToHBase(mutator, tokens[0], "raw_html", null, crawler.readFromHdfs(tokens[0]));
-    				//mutator.flush();
-				}else{
-					System.out.print("SKIP\n");
-					skip_count++;
-					skip_time += (System.currentTimeMillis()-time);
-				}
-				//crawler.m_dfs.delete(tmp_path, false);
-				//line_str = br.readLine();
-				//continue;
-    			//}
-    			line_str = br.readLine();
-    		}
-   			//System.out.println("Run Time: " + (System.currentTimeMillis()-time) + "ms");
-   			System.out.println("INSERTED: " + insert_count);
-   			System.out.println("INSERT_TIME: " + insert_time);
-   			System.out.println("SKIPPED: " + skip_count);
-   			System.out.println("SKIP_TIME: " + skip_time);
-   			System.out.println("ERROR: " + error_count);
-   			System.out.println("ERROR_TIME: " + error_time);
-    		br.close();
-    		table.close();
-    		mutator.close();
-    		conn.close();
-    		
-    		
-    	}
-    	catch(Exception e){
-    		e.printStackTrace();
-    	}   	
-    }
+//    public static void main( String[] args )
+//    {
+//    	if(args.length<4){
+//    		System.out.println("the number of input arguments is less than 3!");
+//    		return;
+//    	}
+//    	
+//    	HtmlCrawler crawler = null;
+//    	BufferedReader br = null;
+//    	String line_str, err_msg;
+//    	String[] tokens;
+//    	Connection conn=null;
+//    	Table table = null;
+//    	BufferedMutator mutator=null;
+//    	long skip_count=0, insert_count=0, error_count=0;
+//    	long skip_time=0, insert_time=0, error_time=0;
+//    	List<Get> gets = new ArrayList<Get>();
+//    	List<String[]> token_list = new ArrayList<String[]>();
+//    	int mini_batch_size = Integer.parseInt(args[2]);
+//    	long time, hbase_get_time;
+//    	
+//    	if(args.length >=5)
+//    		if(args[3].toLowerCase().equals("true"))
+//    			crawler = new HtmlCrawler(args[4], true);
+//    		else
+//    			crawler = new HtmlCrawler(args[4], false);
+//    	else
+//    		crawler = new HtmlCrawler(null, false);
+//    	//crawler.writeToLocal("test","abc",true);
+//    	try{
+//    		//HTable table = new HTable(crawler.m_hbaseConfig, "test");
+//    		conn = ConnectionFactory.createConnection(crawler.m_hbaseConfig);
+//    		//System.out.println(crawler.m_hbaseConfig.get("hbase.client.write.buffer"));
+//    		table = conn.getTable(TableName.valueOf("url_info"));
+//    		mutator = conn.getBufferedMutator(TableName.valueOf("url_info"));
+////        	Get g = new Get(Bytes.toBytes("1"));
+////        	Result r = table.get(g);
+////        	Put p = new Put(Bytes.toBytes("1"));
+////        	p.addColumn(Bytes.toBytes("c1"), Bytes.toBytes("t1"), Bytes.toBytes("6"));
+////        	p.addColumn(Bytes.toBytes("c2"), Bytes.toBytes("m1"), Bytes.toBytes("Haoyang"));
+////        	table.put(p);
+//    		br = new BufferedReader(new InputStreamReader(new FileInputStream("/home/"+crawler.GetOsUserName()+"/Data/input/"+args[0])));
+//    		line_str = br.readLine();
+//    		//long time = System.currentTimeMillis();
+//    		while(line_str != null && !"".equals(line_str)){
+//    			tokens = line_str.split(",");
+//    			if(tokens.length != 2){
+//    				err_msg = "Invalid input url: " + line_str + "\n";
+//    				System.out.print(err_msg);
+//    				continue;
+//    			}
+//    			//Path tmp_path = new Path(crawler.m_hdfsPath + tokens[0] + ".txt");
+//    			token_list.add(tokens);
+//				Get g = new Get(Bytes.toBytes(tokens[0]));
+//				//Result r = table.get(g);
+//				gets.add(g);
+//				
+//				line_str = br.readLine();
+//				
+//				if(line_str == null || "".equals(line_str) || gets.size() == mini_batch_size){
+//					int batch_size = gets.size();
+//					time = System.currentTimeMillis();
+//					Result[] rs = table.get(gets);
+//					hbase_get_time = (System.currentTimeMillis()-time) / batch_size;
+//					for(int i=0; i<batch_size; i++){
+//						System.out.print(token_list.get(i)[0] + ": ");
+//						time = System.currentTimeMillis();
+//						if(rs[i].isEmpty()){
+//			    			String html = crawler.getHtml(token_list.get(i)[1]);
+//			    			if(html != null && !"".equals(html)){
+//			    				crawler.writeToHBase(mutator, token_list.get(i)[0], "raw_html", null, html);
+//			    				System.out.print("INSERT\n");
+//			    				insert_count++;
+//			    				insert_time += (System.currentTimeMillis() - time + hbase_get_time);
+//			    			}else{
+//			    				err_msg = line_str + "\n"; 
+//			    				crawler.writeToLocal(err_msg, "error_" + args[1], true);
+//			    				System.out.print("Local\n");
+//			    				error_count++;
+//			    				error_time += (System.currentTimeMillis() - time + hbase_get_time);
+//			    			}
+//		    				//crawler.writeSequenceFile(tokens[0], crawler.readFromHdfs(tokens[0]), "seq_"+args[1]);
+//		    				//crawler.writeToHBase(mutator, tokens[0], "raw_html", null, crawler.readFromHdfs(tokens[0]));
+//		    				//mutator.flush();
+//						}else{
+//							System.out.print("SKIP\n");
+//							skip_count++;
+//							skip_time += (System.currentTimeMillis() - time + hbase_get_time);
+//						}
+//					}
+//					token_list.clear();
+//					gets.clear();
+//				}
+//				
+//    			//if(crawler.m_dfs.exists(tmp_path)){
+//				
+//				//crawler.m_dfs.delete(tmp_path, false);
+//				//line_str = br.readLine();
+//				//continue;
+//    			//}
+//    			
+//    		}
+//   			//System.out.println("Run Time: " + (System.currentTimeMillis()-time) + "ms");
+//   			System.out.println("INSERTED: " + insert_count);
+//   			System.out.println("INSERT_TIME: " + insert_time);
+//   			System.out.println("SKIPPED: " + skip_count);
+//   			System.out.println("SKIP_TIME: " + skip_time);
+//   			System.out.println("ERROR: " + error_count);
+//   			System.out.println("ERROR_TIME: " + error_time);
+//    		br.close();
+//    		table.close();
+//    		mutator.close();
+//    		conn.close();
+//    		
+//    		
+//    	}
+//    	catch(Exception e){
+//    		e.printStackTrace();
+//    	}   	
+//    }
 }
