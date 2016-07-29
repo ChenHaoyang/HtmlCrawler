@@ -66,6 +66,7 @@ public class HtmlCrawler
 	private String m_osUserName;
 	final private String m_proxyHost = "192.168.10.45";
 	final private int m_proxyPort = 3128;
+	final private int m_waitTime = 3000;
 	
 	public HtmlCrawler(String osUser, boolean proxy){
 		if(osUser != null && !"".equals(osUser))
@@ -79,9 +80,9 @@ public class HtmlCrawler
 					.setProxy(m_httpHost)
 					.build();
 			m_requestConfig = RequestConfig.custom()
-					.setSocketTimeout(5000)
-					.setConnectTimeout(5000)
-					.setConnectionRequestTimeout(5000)
+					.setSocketTimeout(m_waitTime)
+					.setConnectTimeout(m_waitTime)
+					.setConnectionRequestTimeout(m_waitTime)
 					//.setProxy(m_httpHost)
 					.build();
 		}else{
@@ -89,9 +90,9 @@ public class HtmlCrawler
 					.setRedirectStrategy(new LaxRedirectStrategy())
 					.build();
 			m_requestConfig = RequestConfig.custom()
-					.setSocketTimeout(5000)
-					.setConnectTimeout(5000)
-					.setConnectionRequestTimeout(5000)
+					.setSocketTimeout(m_waitTime)
+					.setConnectTimeout(m_waitTime)
+					.setConnectionRequestTimeout(m_waitTime)
 					.build();
 		}
 		m_uDetector = new UniversalDetector(null);
